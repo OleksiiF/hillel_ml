@@ -17,16 +17,24 @@
    1. Find the ML function
    2. Optimization, reduce error of ML function
 
-##### resources 
-* [paperswithcode](https://paperswithcode.com)
-  * datasets
-  * methods
-* tfhub
-  * ready to use models
-* ONNX
-  * ready to use models
-* https://www.youtube.com/watch?v=Ilg3gGewQ5U&ab_channel=3Blue1Brown
-* [streamlit](https://streamlit.io)
+##### resources
+* Data sources
+  * [Paperswithcode](https://paperswithcode.com)
+  * [U.S. Government’s open data](https://data.gov)
+  * [Datasetsearch](https://datasetsearch.research.google.com)
+  * [Datahub](https://datahub.io/collections)
+  * [FBI crime data](https://crime-data-explorer.fr.cloud.gov/pages/home)
+* Ready to use models
+  * [tfhub](https://tfhub.dev)
+  * [ONNX](https://onnx.ai)
+* Theory
+  * [Intro](https://www.youtube.com/playlist?list=PL0Ks75aof3Thg7mpzaPFSXEUVP9PWCTAO)
+  * [Dive into Deep Learning](https://d2l.ai/index.html)
+  * [Geogebra](https://www.geogebra.org)
+  * [DL 3Brown1Blue](https://www.youtube.com/playlist?list=PLZjXXN70PH5itkSPe6LTS-yPyl5soOovc)
+* Tools
+  * [Streamlit](https://streamlit.io)
+  * [MLOPS](https://www.mymlops.com)
 
 ##### Typical issues
 * Curse of dimensionality - in case of large data dimension (a lot of features) classes can be far away from each other and doesn't match one class
@@ -48,13 +56,31 @@
     * regression (1,2,3,4,5)
   * Issues: curse of dimensionality, feature scale
 
+##### NN
+* How much nodes in hidden layer
+  * One output node, and the required input-output relationship is simple,  hidden layer dimension equal to two-thirds of the input dimension.
+  * Multiple output nodes or the required input-output relationship is complex, the dimension of the hidden layer is equal to the sum of the input dimension plus the output dimension (which must be less than doubled the input dimension).
+  * The input-output connection is extremely complex, the dimension of the hidden layer is one less than doubled the input dimension. 
+
+##### Tasks
+* Classification
+  * Target function - categorical cross-entropy  
+* Prognosis
+  * Target function - mean square error function
+
+##### Derivative of the functions (of the activation, error function) 
+* Hardest step of calculation for PC
+* The easier way to calculate a derivative on PC (for all frameworks) is based on 
+  * Replacing numerical differentiation with an analytical one
+  * Decomposition with help of the Polish notation method and the corresponding calculation graph (leaves - operands, nodes - operations) allows to make the parallel calculation
+
 ##### Glossary
 * Convergence - an iterative process of reducing the difference between the previous and current value of a function
   * Accuracy - criterion for convergence
 * Distribution function - description of general/all data
 * Elementary outcome - one event
 * Epoch - 1 iteration trough learning dataset
-* Function of the activation - function which determines the neuron's output signal
+* Function of the activation - function which determines the neuron's output signal. Derivate is required for a spreading an error between nodes
 * Empirical risk - mean of loss function
 * Histogram - description of the data sample
 * Hyperparameter - setup before learning and depend by engineer
@@ -72,3 +98,5 @@
     * P(A) - apriori probability, coef/weights before experiment
     * P(A|B) - posteriori probability (after each iteration become P(A))
 * Representation of the dataset - feature of the dataset to reproduce properties of general/all data
+* Validation of the model - checking on the part of data, which participated in learning
+* Verification of the model - checking on the test (separate) data
