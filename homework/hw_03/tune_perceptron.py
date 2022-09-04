@@ -9,6 +9,15 @@ import numpy
 import matplotlib.pyplot as plt
 
 
+def singleton(class_):
+    instances = {}
+    def getinstance(*args, **kwargs):
+        if class_ not in instances:
+            instances[class_] = class_(*args, **kwargs)
+        return instances[class_]
+    return getinstance
+
+
 class Settings:
     # neural network configuration
     LEARNING_RATE = 0.0175
@@ -47,6 +56,8 @@ class Settings:
             for attribute in atributes
         ])
 
+
+@singleton
 class Logger:
     def __init__(self):
         logging.basicConfig(
