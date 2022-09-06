@@ -35,6 +35,7 @@
 * Tools
   * [Streamlit](https://streamlit.io)
   * [MLOPS](https://www.mymlops.com)
+  * [Optuna](https://optuna.org)
 
 ##### Typical issues
 * Curse of dimensionality - in case of large data dimension (a lot of features) classes can be far away from each other and doesn't match one class
