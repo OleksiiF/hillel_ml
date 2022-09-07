@@ -17,7 +17,7 @@
    1. Find the ML function
    2. Optimization, reduce error of ML function
 
-##### resources
+##### Resources
 * Data sources
   * [Paperswithcode](https://paperswithcode.com)
   * [U.S. Government’s open data](https://data.gov)
@@ -74,6 +74,15 @@
 * The easier way to calculate a derivative on PC (for all frameworks) is based on 
   * Replacing numerical differentiation with an analytical one
   * Decomposition with help of the Polish notation method and the corresponding calculation graph (leaves - operands, nodes - operations) allows to make the parallel calculation
+
+##### Model traininig
+* Signs that the model is training correctly
+  * The loss function decreasing
+  * Accuracy on the validation set is growing
+  * Accuracy on the test set is growing
+* Signs that the model is not training correctly
+  * Accuracy increasing but loss function is not decreasing
+  * Accuracy on the validation set is growing, but decreasing on the test set
 
 ##### Glossary
 * Convergence - an iterative process of reducing the difference between the previous and current value of a function

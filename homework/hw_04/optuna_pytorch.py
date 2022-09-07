@@ -19,12 +19,11 @@ def tb_writer():
     """
     return tenserboard writer
     """
-    writer = SummaryWriter("runs")
+    writer = SummaryWriter()
     try:
         yield writer
 
     finally:
-        writer.flush()
         writer.close()
 
 
@@ -257,6 +256,7 @@ def objective(trial):
     })
     model.train_model()
     model.test_model()
+    model.write_tb_data()
 
     return model.test_accuracy
 
@@ -268,11 +268,8 @@ if __name__ == '__main__':
 
     study = optuna.create_study(
         study_name="PyTorch MNIST",
-        sampler=optuna.samplers.TPESampler(),  # method to choice params
         direction='maximize',
     )
     study.optimize(objective, n_jobs=-1, n_trials=100)
-
-    best_trial = study.best_trial
-    for key, value in best_trial.params.items():
-        print("{}: {}".format(key, value))
+    # after study -> tensorboard --logdir runs
+    # go to http://localhost:6006
