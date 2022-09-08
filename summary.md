@@ -42,10 +42,11 @@
 * Feature scale - an issue of different scale for features (the model will assume that the price of a house equally depends on both the footage to the metro and the number of rooms --> delta 3 rooms ~ delta 3 meters to the metro)
 
 ##### Issues solutions
-* PCA (Principal Component Analysis) - method of reducing data dimensionality and noise in data
-  * Only works with numbers
-  * Scale sensitive (requires data standardization before use)
-  * Outliers are highly impacted (requires removal/limitation)
+* Dimensionality reduction
+  * PCA (Principal Component Analysis) - method of reducing data dimensionality and noise in data, data encrypting
+    * Only works with numbers
+    * Scale sensitive (requires data standardization before use)
+    * Outliers are highly impacted (requires removal/limitation)
 * Normalization of scale
   * Subtract the mean from the feature value and divide by the standard deviation
   * Each feature normalized by specified number (weight)

@@ -66,7 +66,6 @@ class Logger:
             datefmt="%m-%d %H:%M",
             filename=Settings.LOG_FILENAME,
         )
-        console_handler = logging.StreamHandler()
         file_handler = TimedRotatingFileHandler(
             filename=Settings.LOG_FILENAME,
             when=Settings.LOG_TIMEFRAME,
@@ -78,9 +77,6 @@ class Logger:
         )
         file_handler.suffix = '%Y-%m-%d_%H_%M_%S.log'
         self.__logger = logging.getLogger()
-        self.__logger.handlers.clear()
-        self.__logger.propagate = False
-        self.__logger.addHandler(console_handler)
         self.__logger.addHandler(file_handler)
 
     def msg_handler(self, msg, st_log=True, python_log=True):

@@ -268,8 +268,9 @@ if __name__ == '__main__':
 
     study = optuna.create_study(
         study_name="PyTorch MNIST",
+        sampler=optuna.samplers.RandomSampler(),
         direction='maximize',
     )
-    study.optimize(objective, n_jobs=-1, n_trials=100)
+    study.optimize(objective, n_jobs=-1)
     # after study -> tensorboard --logdir runs
     # go to http://localhost:6006
