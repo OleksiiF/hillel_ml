@@ -7,11 +7,10 @@ from torch import (
     cuda,
     device,
     utils,
-    rand,
+    from_numpy,
     pca_lowrank,
     max as torch_max,
-    nn as torch_nn,
-
+    nn as torch_nn
 )
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import datasets, transforms
@@ -36,17 +35,18 @@ class NeuralNetwork(torch_nn.Module):
     def __init__(
             self,
             epochs=27,
-            dropout=.22,
+            # dropout=.22,
+            dropout=0,
             learning_rate=0.03593,
             optimizer='Adagrad',
             activation_func="glu",
             hidden_layers=2,
             batch_size=20,
             hidden_layer_dimensions=420,
+            pca=200
     ):
         super(NeuralNetwork, self).__init__()
         self.device = device("cuda" if cuda.is_available() else "cpu")
-        self.device = device("cpu")
         self.to(self.device)
         # hyperparams
         self.hidden_layer_dimensions = hidden_layer_dimensions
@@ -56,6 +56,7 @@ class NeuralNetwork(torch_nn.Module):
         self.dropout = torch_nn.Dropout(dropout)  # prevents overwriting
         self.loss_function = torch_nn.CrossEntropyLoss()
         self.learning_rate = learning_rate
+        self.pca = pca
         self.__optimizer = optimizer
         self.optimizer = getattr(optim, self.__optimizer)(
             self.parameters(),
@@ -73,11 +74,23 @@ class NeuralNetwork(torch_nn.Module):
         self.test_data = self.get_data(is_train=False)
         self.train_loader = self.get_data_loader(self.train_data)
         self.test_loader = self.get_data_loader(self.test_data)
+        self.np_train_data = self.train_data.data.numpy()
+        self.np_test_data = self.test_data.data.numpy()
+        train_U, train_S, train_V = pca_lowrank(
+            from_numpy(self.np_train_data).double(),
+            niter=self.pca
+        )
+        test_U, test_S, test_V = pca_lowrank(
+            from_numpy(self.np_test_data).double(),
+            niter=self.pca
+        )
+        self.train_S = self.get_data_loader(train_S)
+        self.test_S = self.get_data_loader(test_S)
 
         self.test_accuracy = 0.0
 
     def make_hidden_layers(self):
-        self.fc1 = torch_nn.Linear(28 * 28, self.hidden_layer_dimensions)
+        self.fc1 = torch_nn.Linear(3 * 2, self.hidden_layer_dimensions)
         self.fc1.to(self.device)
         for i in range(self.hidden_layers):
             tmp = torch_nn.Linear(
@@ -93,9 +106,9 @@ class NeuralNetwork(torch_nn.Module):
         )
 
     def forward(self, input):
-        flatten_image_input = input.view(-1, 28 * 28).to(self.device)
+        flatten_image_input = input.view(-1, 3 * 2).to(self.device)
         output = self.activation_func(
-            self.fc1(flatten_image_input)
+            self.fc1(flatten_image_input.float())
         )  # add hidden layer, with relu activation function
         
         return output
@@ -117,6 +130,52 @@ class NeuralNetwork(torch_nn.Module):
             num_workers=self.num_workers
         )
 
+    def train_model_pca(self):
+        self.train()
+
+        for epoch in range(self.epochs):
+            # train the model
+            for target_source, pca_data in zip(self.train_loader, self.train_S):
+                _, target = target_source
+                self.optimizer.zero_grad()  # clear the gradients of all optimized variables
+                # forward pass: compute predicted outputs by passing inputs to the model
+                output = self(pca_data)
+                loss = self.loss_function(
+                    output.to(self.device),
+                    target.to(self.device)
+                )  # calculate the loss
+                loss.backward()  # backward pass: compute gradient of the loss with respect to model parameters
+                self.optimizer.step()  # perform a single optimization step (parameter update)
+
+    def test_model_pca(self) -> None:
+        test_loss_counter = 0.0
+        class_correct = [0.] * 10
+        class_total = [0.] * 10
+        self.eval()
+
+        for target_source, pca_data in zip(self.train_loader, self.test_S):
+            _, target = target_source
+            output = self(pca_data)  # forward pass: compute predicted outputs by passing inputs to the model
+            loss = self.loss_function(output, target.to(self.device))  # calculate the loss
+            test_loss_counter += loss.item() * pca_data.size(0)  # update test loss
+            _, pred = torch_max(output, 1)  # convert output probabilities to predicted class
+
+            correct = np.squeeze(
+                pred.eq(
+                    target.data.view_as(
+                        pred.to(self.device)
+                    ).to(self.device)
+                ).to(self.device)
+            )  # compare predictions to true label
+            # calculate test accuracy for each object class
+            for i in range(self.batch_size):
+                label = target.data[i]
+                class_correct[label] += correct[i].item()
+                class_total[label] += 1
+
+        self.test_accuracy = sum(class_correct) / sum(class_total)
+
+
     def train_model(self):
         self.train()
 
@@ -133,14 +192,41 @@ class NeuralNetwork(torch_nn.Module):
                 loss.backward()  # backward pass: compute gradient of the loss with respect to model parameters
                 self.optimizer.step()  # perform a single optimization step (parameter update)
 
-    def pca_worker(self) -> None:
+    def test_model(self) -> None:
+        test_loss_counter = 0.0
+        class_correct = [0.] * 10
+        class_total = [0.] * 10
+        self.eval()
+
+        for data, target in self.test_loader:
+            output = self(data)  # forward pass: compute predicted outputs by passing inputs to the model
+            loss = self.loss_function(output, target.to(self.device))  # calculate the loss
+            test_loss_counter += loss.item() * data.size(0)  # update test loss
+            _, pred = torch_max(output, 1)  # convert output probabilities to predicted class
+
+            correct = np.squeeze(
+                pred.eq(
+                    target.data.view_as(
+                        pred.to(self.device)
+                    ).to(self.device)
+                ).to(self.device)
+            )  # compare predictions to true label
+            # calculate test accuracy for each object class
+            for i in range(self.batch_size):
+                label = target.data[i]
+                class_correct[label] += correct[i].item()
+                class_total[label] += 1
+
+        self.test_accuracy = sum(class_correct) / sum(class_total)
+        # test_loss = test_loss_counter / len(self.test_loader.dataset)
+
+    def pca_drawer(self) -> None:
         """
         Draws visualization of the explained variance
         depending on components
         """
-        train_data_array = self.train_data.data.numpy()
-        nsamples, nx, ny = train_data_array.shape
-        d2_train_dataset = train_data_array.reshape((nsamples, nx * ny))
+        nsamples, nx, ny = self.np_train_data.shape
+        d2_train_dataset = self.np_train_data.reshape((nsamples, nx * ny))
 
         pca = PCA().fit(d2_train_dataset)
         plt.plot(np.cumsum(pca.explained_variance_ratio_))
@@ -170,34 +256,6 @@ class NeuralNetwork(torch_nn.Module):
 
         with tb_writer() as writer:
             writer.add_hparams(*hyper_params)
-
-    def test_model(self) -> None:
-        test_loss_counter = 0.0
-        class_correct = [0.] * 10
-        class_total = [0.] * 10
-        self.eval()
-
-        for data, target in self.test_loader:
-            output = self(data)  # forward pass: compute predicted outputs by passing inputs to the model
-            loss = self.loss_function(output, target.to(self.device))  # calculate the loss
-            test_loss_counter += loss.item() * data.size(0)  # update test loss
-            _, pred = torch_max(output, 1)  # convert output probabilities to predicted class
-
-            correct = np.squeeze(
-                pred.eq(
-                    target.data.view_as(
-                        pred.to(self.device)
-                    ).to(self.device)
-                ).to(self.device)
-            )  # compare predictions to true label
-            # calculate test accuracy for each object class
-            for i in range(self.batch_size):
-                label = target.data[i]
-                class_correct[label] += correct[i].item()
-                class_total[label] += 1
-
-        self.test_accuracy = sum(class_correct) / sum(class_total)
-        # test_loss = test_loss_counter / len(self.test_loader.dataset)
 
 
 class OptunaSettings:
@@ -264,22 +322,31 @@ class OptunaSettings:
             'rrelu',
         ]
     }
+    pca = {
+        'name': 'pca',
+        'low': 100,
+        'high': 200,
+        'step': 10
+    }
 
 
 def objective(trial):
     model = NeuralNetwork(**{
-        'epochs': trial.suggest_int(**OptunaSettings.epochs),
-        'hidden_layers': trial.suggest_int(**OptunaSettings.hidden_layers),
-        'dropout': trial.suggest_float(**OptunaSettings.dropout),
-        'learning_rate': trial.suggest_float(**OptunaSettings.lr),
-        'optimizer': trial.suggest_categorical(**OptunaSettings.optimizer),
-        'activation_func': trial.suggest_categorical(**OptunaSettings.activation_func),
-        'hidden_layer_dimensions': trial.suggest_int(**OptunaSettings.hidden_layer_dimensions),
+        'pca': trial.suggest_int(**OptunaSettings.pca),
+        # 'epochs': trial.suggest_int(**OptunaSettings.epochs),
+        # 'hidden_layers': trial.suggest_int(**OptunaSettings.hidden_layers),
+        # 'dropout': trial.suggest_float(**OptunaSettings.dropout),
+        # 'learning_rate': trial.suggest_float(**OptunaSettings.lr),
+        # 'optimizer': trial.suggest_categorical(**OptunaSettings.optimizer),
+        # 'activation_func': trial.suggest_categorical(**OptunaSettings.activation_func),
+        # 'hidden_layer_dimensions': trial.suggest_int(**OptunaSettings.hidden_layer_dimensions),
     })
-    model.pca_worker()
     # model.train_model()
     # model.test_model()
-    # model.write_tb_data()
+    # model.pca_drawer()
+    model.train_model_pca()
+    model.test_model_pca()
+    model.write_tb_data()
 
     return model.test_accuracy
 

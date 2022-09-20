@@ -32,6 +32,7 @@
   * [Dive into Deep Learning](https://d2l.ai/index.html)
   * [Geogebra](https://www.geogebra.org)
   * [DL 3Brown1Blue](https://www.youtube.com/playlist?list=PLZjXXN70PH5itkSPe6LTS-yPyl5soOovc)
+  * [Singular value decomposition](https://www.youtube.com/watch?v=mfn_2d_lLxM)
 * Tools
   * [Streamlit](https://streamlit.io)
   * [MLOPS](https://www.mymlops.com)
@@ -47,6 +48,7 @@
     * Only works with numbers
     * Scale sensitive (requires data standardization before use)
     * Outliers are highly impacted (requires removal/limitation)
+  * UMAP (Uniform Manifold Approximation and Projection)
 * Normalization of scale
   * Subtract the mean from the feature value and divide by the standard deviation
   * Each feature normalized by specified number (weight)
@@ -63,6 +65,10 @@
   * One output node, and the required input-output relationship is simple,  hidden layer dimension equal to two-thirds of the input dimension.
   * Multiple output nodes or the required input-output relationship is complex, the dimension of the hidden layer is equal to the sum of the input dimension plus the output dimension (which must be less than doubled the input dimension).
   * The input-output connection is extremely complex, the dimension of the hidden layer is one less than doubled the input dimension. 
+* Perceptron
+* Autoencoder
+  * Task - reproduce data
+  * Usefull sid effect - reduce data dimensionality
 
 ##### Tasks
 * Classification
@@ -76,7 +82,7 @@
   * Replacing numerical differentiation with an analytical one
   * Decomposition with help of the Polish notation method and the corresponding calculation graph (leaves - operands, nodes - operations) allows to make the parallel calculation
 
-##### Model traininig
+##### Model training
 * Signs that the model is training correctly
   * The loss function decreasing
   * Accuracy on the validation set is growing
