@@ -37,6 +37,7 @@
   * [Streamlit](https://streamlit.io)
   * [MLOPS](https://www.mymlops.com)
   * [Optuna](https://optuna.org)
+  * [Lazypredict](https://lazypredict.readthedocs.io/en/latest)
 
 ##### Typical issues
 * Curse of dimensionality - in case of large data dimension (a lot of features) classes can be far away from each other and doesn't match one class
@@ -96,6 +97,10 @@
   * Accuracy - criterion for convergence
 * Distribution function - description of general/all data
 * Elementary outcome - one event
+* Embeddings - hidden representations of data, in view of weights
+  * Autocoder better in NLP, sounds, semantic search, docs. Requires learning
+  * UMAP - special case of autocoder. In case defined size of dataset, but with unknown classes. (fraud detection, pictures)
+  * PCA - quick option to data overview
 * Epoch - 1 iteration trough learning dataset
 * Function of the activation - function which determines the neuron's output signal. Derivate is required for a spreading an error between nodes
 * Empirical risk - mean of loss function
@@ -114,6 +119,10 @@
   * Bayesian probability (conditional probability) -> P(A|B) = P(B|A) * P(A) / P(B)
     * P(A) - apriori probability, coef/weights before experiment
     * P(A|B) - posteriori probability (after each iteration become P(A))
+* Regularization - any modification of the model to reduce its generalization error without reducing the learning error
+  * Dropout
+  * L1 - sum of absolute value of weights
+  * L2 - sum of square of weights
 * Representation of the dataset - feature of the dataset to reproduce properties of general/all data
 * Validation of the model - checking on the part of data, which participated in learning
 * Verification of the model - checking on the test (separate) data
