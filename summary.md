@@ -28,20 +28,22 @@
   * [tfhub](https://tfhub.dev)
   * [ONNX](https://onnx.ai)
 * Theory
-  * [Intro](https://www.youtube.com/playlist?list=PL0Ks75aof3Thg7mpzaPFSXEUVP9PWCTAO)
   * [Dive into Deep Learning](https://d2l.ai/index.html)
   * [Geogebra](https://www.geogebra.org)
   * [DL 3Brown1Blue](https://www.youtube.com/playlist?list=PLZjXXN70PH5itkSPe6LTS-yPyl5soOovc)
   * [Singular value decomposition](https://www.youtube.com/watch?v=mfn_2d_lLxM)
 * Tools
-  * [Streamlit](https://streamlit.io)
-  * [MLOPS](https://www.mymlops.com)
   * [Optuna](https://optuna.org)
   * [Lazypredict](https://lazypredict.readthedocs.io/en/latest)
+  * [MLOPS](https://www.mymlops.com)
+  * [NLTK](https://www.nltk.org)
+  * [Spacy](https://spacy.io)
+  * [Streamlit](https://streamlit.io)
 
 ##### Typical issues
 * Curse of dimensionality - in case of large data dimension (a lot of features) classes can be far away from each other and doesn't match one class
 * Feature scale - an issue of different scale for features (the model will assume that the price of a house equally depends on both the footage to the metro and the number of rooms --> delta 3 rooms ~ delta 3 meters to the metro)
+* The exploding and vanishing gradients problem in timeseries
 
 ##### Issues solutions
 * Dimensionality reduction
@@ -53,6 +55,9 @@
 * Normalization of scale
   * Subtract the mean from the feature value and divide by the standard deviation
   * Each feature normalized by specified number (weight)
+* The exploding and vanishing gradients problem in timeseries
+  * LSTM (Long Short-Term Memory)
+  * GRU (Gated Recurrent Units)
 
 ##### Models
 * KNN (K Nearest Neighbors)
@@ -62,14 +67,18 @@
   * Issues: curse of dimensionality, feature scale
 
 ##### NN
+* Disadvantages:
+  * Unexplainable (aka black-box)
+* Perceptron:
+  * 1 hidden layer
+  * forward signal
+* Autoencoder
+  * Task - reproduce data
+  * Usefull sid effect - reduce data dimensionality
 * How much nodes in hidden layer
   * One output node, and the required input-output relationship is simple,  hidden layer dimension equal to two-thirds of the input dimension.
   * Multiple output nodes or the required input-output relationship is complex, the dimension of the hidden layer is equal to the sum of the input dimension plus the output dimension (which must be less than doubled the input dimension).
   * The input-output connection is extremely complex, the dimension of the hidden layer is one less than doubled the input dimension. 
-* Perceptron
-* Autoencoder
-  * Task - reproduce data
-  * Usefull sid effect - reduce data dimensionality
 
 ##### Tasks
 * Classification
@@ -93,17 +102,18 @@
   * Accuracy on the validation set is growing, but decreasing on the test set
 
 ##### Glossary
+* Checkpoint - saved weights of the model
 * Convergence - an iterative process of reducing the difference between the previous and current value of a function
   * Accuracy - criterion for convergence
 * Distribution function - description of general/all data
 * Elementary outcome - one event
-* Embeddings - hidden representations of data, in view of weights
-  * Autocoder better in NLP, sounds, semantic search, docs. Requires learning
-  * UMAP - special case of autocoder. In case defined size of dataset, but with unknown classes. (fraud detection, pictures)
+* Embeddings - representations of data in hidden dimension, in view of weights
+  * Autoencoder better in NLP, sounds, semantic search, docs. Requires learning
+  * UMAP - special case of autoencoder. In case defined size of dataset, but with unknown classes. (fraud detection, pictures)
   * PCA - quick option to data overview
+* Empirical risk - mean of loss function
 * Epoch - 1 iteration trough learning dataset
 * Function of the activation - function which determines the neuron's output signal. Derivate is required for a spreading an error between nodes
-* Empirical risk - mean of loss function
 * Histogram - description of the data sample
 * Hyperparameter - setup before learning and depend by engineer
   * Learning rate
@@ -111,6 +121,10 @@
   * Epoch quantity
 * Learning rate - indicates which part of the information is still and which will be used for recalculation
 * Model of ML, function of ML - a function, which describes the dataset, often it is distribution function
+* NLP
+  * Tagging
+  * Lemmatizing - base form of the word
+  * Stemming - root of the word
 * Optimization - set of methods to find the coefficients/weights of Model/NN, which provide the extremums (usually minimums) of the error's function/target function/loss function.
   * Method of the least squares
   * Method of most likelihood
