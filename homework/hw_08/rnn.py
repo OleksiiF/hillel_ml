@@ -13,17 +13,6 @@ from torch.utils.data import DataLoader, TensorDataset
 
 class Dataset(torch.utils.data.Dataset):
     def __init__(self):
-        with open('text.txt', 'rb') as fh:
-            text = self.__get_cleaned_text(fh.read())
-
-        self.chars = tuple(set(text))
-        self.int_to_vocab = dict(enumerate(self.chars))
-        self.vocab_to_int = {ch: index for index, ch in self.int_to_vocab.items()}
-        self.encoded = [self.vocab_to_int[word] for word in text]
-
-        self.seq_length = 8
-        self.batch_size = 256
-
         self.pun_chars = {
             '.': '||period||',
             ',': '||comma||',
@@ -37,9 +26,19 @@ class Dataset(torch.utils.data.Dataset):
             '\n': '||return||'
         }
 
-    def __get_cleaned_text(self, data):
+        with open('text.txt', 'rb') as fh:
+            text = self.__get_cleaned_text(fh.read())
 
-        white_chars = string.ascii_letters + ''.join(self.pun_chars.values())
+        self.chars = tuple(set(text))
+        self.int_to_vocab = dict(enumerate(self.chars))
+        self.vocab_to_int = {ch: index for index, ch in self.int_to_vocab.items()}
+        self.encoded = [self.vocab_to_int[word] for word in text]
+
+        self.seq_length = 8
+        self.batch_size = 256
+
+    def __get_cleaned_text(self, data):
+        white_chars = string.ascii_letters + ''.join(self.pun_chars.values()) + ' '
         data = ''.join([
             char for char in data.decode().lower().strip()
             if char in white_chars
@@ -65,7 +64,6 @@ class Dataset(torch.utils.data.Dataset):
         feature_tensors = torch.from_numpy(np.array(feature))
 
         data = TensorDataset(feature_tensors, target_tensors)
-
         data_loader = torch.utils.data.DataLoader(data, batch_size=self.batch_size, shuffle=True)
 
         return data_loader
@@ -77,17 +75,16 @@ class RNN(nn.Module):
         self.device = device("cuda" if cuda.is_available() else "cpu")
         self.to(self.device)
 
+        self.dataset = dataset
         self.n_layers = n_layers
         self.hidden_dim = hidden_dim
         self.output_size = len(dataset.vocab_to_int)
         self.vocab_size = len(dataset.vocab_to_int)
         self.dropout = nn.Dropout(dropout)
         self.embedding_dim = embedding_dim
+        self.n_epochs = 25
 
-        self.train_loader = dataset.get_dataloader(
-            dataset.seq_length,
-            dataset.batch_size
-        )
+        self.train_loader = dataset.get_dataloader()
 
         # Model Layers
         self.embedding = nn.Embedding(self.vocab_size, embedding_dim)
@@ -124,22 +121,22 @@ class RNN(nn.Module):
         )
 
 
-    def forward_back_prop(self, rnn, optimizer, criterion, inp, target, hidden):
+    def forward_back_prop(self, inp, target, hidden):
         inp, target = inp.cuda().to(self.device), target.cuda().to(self.device)
 
         hidden = tuple([i.data for i in hidden])
 
-        rnn.zero_grad()
-        out, hidden = rnn(inp, hidden)
+        self.zero_grad()
+        out, hidden = self(inp, hidden)
 
-        loss = criterion(out, target)
+        loss = self.criterion(out, target)
         loss.backward()
 
         clip = 5
 
-        nn.utils.clip_grad_norm_(rnn.parameters(), clip)
+        nn.utils.clip_grad_norm_(self.parameters(), clip)
 
-        optimizer.step()
+        self.optimizer.step()
 
         return loss.item(), hidden
 
@@ -149,13 +146,13 @@ class RNN(nn.Module):
         self.train()
         print("Training for %d epoch(s)..." % self.n_epochs)
         for epoch_i in range(1, self.n_epochs + 1):
-            hidden = self.init_hidden(self.batch_size)
+            hidden = self.init_hidden(self.dataset.batch_size)
 
             for batch_i, (inputs, labels) in enumerate(self.train_loader, 1):
-                n_batches = len(self.train_loader.dataset) // self.batch_size
+                n_batches = len(self.train_loader.dataset) // self.dataset.batch_size
                 if (batch_i > n_batches):
                     break
-                loss, hidden = self.forward_back_prop(self, self.optimizer, self.criterion, inputs, labels, hidden)
+                loss, hidden = self.forward_back_prop( inputs, labels, hidden)
 
                 batch_losses.append(loss)
                 if batch_i % self.show_every_n_batches == 0:
