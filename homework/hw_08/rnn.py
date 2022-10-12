@@ -1,3 +1,5 @@
+import os
+
 import torch.nn.functional as F
 import string
 
@@ -5,7 +7,7 @@ import numpy as np
 import torch
 
 from torch import nn, device, cuda
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, TensorDataset
 
 
 
@@ -15,170 +17,197 @@ class Dataset(torch.utils.data.Dataset):
             text = self.__get_cleaned_text(fh.read())
 
         self.chars = tuple(set(text))
-        self.int2char = dict(enumerate(self.chars))
-        self.char2int = {ch: index for index, ch in self.int2char.items()}
-        self.encoded = np.array([self.char2int[ch] for ch in text])
+        self.int_to_vocab = dict(enumerate(self.chars))
+        self.vocab_to_int = {ch: index for index, ch in self.int_to_vocab.items()}
+        self.encoded = [self.vocab_to_int[word] for word in text]
+
+        self.seq_length = 8
+        self.batch_size = 256
+
+        self.pun_chars = {
+            '.': '||period||',
+            ',': '||comma||',
+            '"': '||quotation_mark||',
+            ';': '||semicolon||',
+            '!': '||exclamation_mark||',
+            '?': '||question_mark||',
+            '(': '||left_parentheses||',
+            ')': '||right_Parentheses||',
+            '-': '||dash||',
+            '\n': '||return||'
+        }
 
     def __get_cleaned_text(self, data):
-        white_chars = string.ascii_letters + " .,;'-"
 
-        return ''.join([
-            char for char in data.decode().strip()
+        white_chars = string.ascii_letters + ''.join(self.pun_chars.values())
+        data = ''.join([
+            char for char in data.decode().lower().strip()
             if char in white_chars
         ])
 
+        for key, token in self.pun_chars.items():
+            data = data.replace(key, f' {token} ')
 
+        return data.split() + ['<PAD>']
 
+    def get_dataloader(self):
+        batch_num = len(self.encoded) // self.batch_size
+        batch_words = self.encoded[: (batch_num * self.batch_size)]
 
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import nltk
-import string
-import random
-import torch
+        feature, target = [], []
+        target_len = len(batch_words[:-self.seq_length])
 
-# Check if GPU is available
-train_on_gpu = torch.cuda.is_available()
+        for i in range(0, target_len):
+            feature.append(batch_words[i: i + self.seq_length])
+            target.append(batch_words[i + self.seq_length])
 
+        target_tensors = torch.from_numpy(np.array(target))
+        feature_tensors = torch.from_numpy(np.array(feature))
 
-train_df = pd.read_csv('../input/train.csv')
-author = train_df[train_df['author'] == 'EAP']["text"]
-author[:5]
+        data = TensorDataset(feature_tensors, target_tensors)
 
+        data_loader = torch.utils.data.DataLoader(data, batch_size=self.batch_size, shuffle=True)
 
-text = list(author[:100])
-def joinStrings(text):
-    return ' '.join(string for string in text)
-text = joinStrings(text)
-# text = [item for sublist in author[:5].values for item in sublist]
-len(text.split())
-
-stop = set(nltk.corpus.stopwords.words('english'))
-exclude = set(string.punctuation)
-lemma = nltk.stem.wordnet.WordNetLemmatizer()
-def clean(doc):
-        stop_free = " ".join([i for i in doc.split() if i not in stop])
-        punc_free = "".join(ch for ch in stop_free if ch not in exclude)
-        normalized = " ".join(lemma.lemmatize(word) for word in punc_free.split())
-        return normalized
-test_sentence = clean(text).lower().split()
-
-
-trigrams = [([test_sentence[i], test_sentence[i + 1]], test_sentence[i + 2])
-            for i in range(len(test_sentence) - 2)]
-chunk_len=len(trigrams)
-print(trigrams[:3])
-
-vocab = set(test_sentence)
-voc_len=len(vocab)
-word_to_ix = {word: i for i, word in enumerate(vocab)}
-
-inp=[]
-tar=[]
-for context, target in trigrams:
-        context_idxs = torch.tensor([word_to_ix[w] for w in context], dtype=torch.long)
-        inp.append(context_idxs)
-        targ = torch.tensor([word_to_ix[target]], dtype=torch.long)
-        tar.append(targ)
-
-import torch
-import torch.nn as nn
-from torch.autograd import Variable
+        return data_loader
 
 
 class RNN(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size, n_layers=1):
-        super(RNN, self).__init__()
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.output_size = output_size
+    def __init__(self, dataset, embedding_dim=256, hidden_dim=512, n_layers=3, dropout=0.3):
+        super().__init__()
+        self.device = device("cuda" if cuda.is_available() else "cpu")
+        self.to(self.device)
+
         self.n_layers = n_layers
+        self.hidden_dim = hidden_dim
+        self.output_size = len(dataset.vocab_to_int)
+        self.vocab_size = len(dataset.vocab_to_int)
+        self.dropout = nn.Dropout(dropout)
+        self.embedding_dim = embedding_dim
 
-        self.encoder = nn.Embedding(input_size, hidden_size)
-        self.gru = nn.GRU(hidden_size * 2, hidden_size, n_layers, batch_first=True,
-                          bidirectional=False)
-        self.decoder = nn.Linear(hidden_size, output_size)
+        self.train_loader = dataset.get_dataloader(
+            dataset.seq_length,
+            dataset.batch_size
+        )
 
-    def forward(self, input, hidden):
-        input = self.encoder(input.view(1, -1))
-        output, hidden = self.gru(input.view(1, 1, -1), hidden)
-        output = self.decoder(output.view(1, -1))
-        return output, hidden
+        # Model Layers
+        self.embedding = nn.Embedding(self.vocab_size, embedding_dim)
+        self.lstm = nn.LSTM(embedding_dim, hidden_dim, n_layers, dropout=dropout, batch_first=True)
+        self.fc = nn.Linear(hidden_dim, self.output_size)
 
-    def init_hidden(self):
-        return Variable(torch.zeros(self.n_layers, 1, self.hidden_size))
+        self.epoch = 25
+        self.lr = 0.0003
+        self.show_every_n_batches = 500
 
+    def forward(self, nn_input, hidden):
+        batch_size = nn_input.size(0)
+        nn_input = nn_input.long()
 
-def train(inp, target):
-    hidden = decoder.init_hidden().cuda()
-    decoder.zero_grad()
-    loss = 0
+        embed_out = self.embedding(nn_input)
+        lstm_out, hidden = self.lstm(embed_out, hidden)
 
-    for c in range(chunk_len):
-        output, hidden = decoder(inp[c].cuda(), hidden)
-        loss += criterion(output, target[c].cuda())
+        lstm_out = lstm_out.contiguous().view(-1, self.hidden_dim)
 
-    loss.backward()
-    decoder_optimizer.step()
+        lstm_out = self.dropout(lstm_out)
+        lstm_out = self.fc(lstm_out)
 
-    return loss.data.item() / chunk_len
+        lstm_out = lstm_out.view(batch_size, -1, self.output_size)
+        lstm_output = lstm_out[:, -1]
 
+        return lstm_output, hidden
 
-import time, math
+    def init_hidden(self, batch_size):
+        weight = next(self.parameters()).data
 
-
-def time_since(since):
-    s = time.time() - since
-    m = math.floor(s / 60)
-    s -= m * 60
-    return '%dm %ds' % (m, s)
-
-
-n_epochs = 300
-print_every = 100
-plot_every = 10
-hidden_size = 100
-n_layers = 1
-lr = 0.015
-
-decoder = RNN(voc_len, hidden_size, voc_len, n_layers)
-decoder_optimizer = torch.optim.Adam(decoder.parameters(), lr=lr)
-criterion = nn.CrossEntropyLoss()
-
-start = time.time()
-all_losses = []
-loss_avg = 0
-if (train_on_gpu):
-    decoder.cuda()
-for epoch in range(1, n_epochs + 1):
-    loss = train(inp, tar)
-    loss_avg += loss
-
-    if epoch % print_every == 0:
-        print('[%s (%d %d%%) %.4f]' % (time_since(start), epoch, epoch / n_epochs * 50, loss))
-    #         print(evaluate('ge', 200), '\n')
-
-    if epoch % plot_every == 0:
-        all_losses.append(loss_avg / plot_every)
-        loss_avg = 0
+        return(
+            weight.new(self.n_layers, batch_size, self.hidden_dim).zero_().to(self.device),
+            weight.new(self.n_layers, batch_size, self.hidden_dim).zero_().to(self.device)
+        )
 
 
-def evaluate(prime_str='this process', predict_len=100, temperature=0.8):
-    hidden = decoder.init_hidden().cuda()
+    def forward_back_prop(self, rnn, optimizer, criterion, inp, target, hidden):
+        inp, target = inp.cuda().to(self.device), target.cuda().to(self.device)
 
-    for p in range(predict_len):
-        prime_input = torch.tensor([word_to_ix[w] for w in prime_str.split()], dtype=torch.long).cuda()
-        inp = prime_input[-2:]  # last two words as input
-        output, hidden = decoder(inp, hidden)
+        hidden = tuple([i.data for i in hidden])
 
-        # Sample from the network as a multinomial distribution
-        output_dist = output.data.view(-1).div(temperature).exp()
-        top_i = torch.multinomial(output_dist, 1)[0]
+        rnn.zero_grad()
+        out, hidden = rnn(inp, hidden)
 
-        # Add predicted word to string and use as next input
-        predicted_word = list(word_to_ix.keys())[list(word_to_ix.values()).index(top_i)]
-        prime_str += " " + predicted_word
-    #         inp = torch.tensor(word_to_ix[predicted_word], dtype=torch.long)
+        loss = criterion(out, target)
+        loss.backward()
 
-    return prime_str
+        clip = 5
+
+        nn.utils.clip_grad_norm_(rnn.parameters(), clip)
+
+        optimizer.step()
+
+        return loss.item(), hidden
+
+
+    def train_rnn(self):
+        batch_losses = []
+        self.train()
+        print("Training for %d epoch(s)..." % self.n_epochs)
+        for epoch_i in range(1, self.n_epochs + 1):
+            hidden = self.init_hidden(self.batch_size)
+
+            for batch_i, (inputs, labels) in enumerate(self.train_loader, 1):
+                n_batches = len(self.train_loader.dataset) // self.batch_size
+                if (batch_i > n_batches):
+                    break
+                loss, hidden = self.forward_back_prop(self, self.optimizer, self.criterion, inputs, labels, hidden)
+
+                batch_losses.append(loss)
+                if batch_i % self.show_every_n_batches == 0:
+                    print('Epoch: {:>4}/{:<4}  Loss: {}\n'.format(
+                        epoch_i, self.n_epochs, np.average(batch_losses)))
+                    batch_losses = []
+
+        return self
+
+    def generate(self, prime_word, predict_len=100):
+        self.eval()
+        prime_id = self.dataset.vocab_to_int[prime_word]
+        current_seq = np.full((1, self.seq_length), '<PAD>')
+        current_seq[-1][-1] = prime_id
+        predicted = [self.dataset.int_to_vocab[prime_id]]
+
+        for _ in range(predict_len):
+            current_seq = torch.LongTensor(current_seq).to(self.device)
+            hidden = self.init_hidden(current_seq.size(0))
+            output, _ = self(current_seq, hidden)
+            p = F.softmax(output, dim=1).data
+            p = p.to(self.device)
+            top_k = 5
+            p, top_i = p.topk(top_k)
+            top_i = top_i.numpy().squeeze()
+            p = p.numpy().squeeze()
+            word_i = np.random.choice(top_i, p=p / p.sum())
+            word = self.dataset.int_to_vocab[word_i]
+            predicted.append(word)
+            current_seq = current_seq.cpu().numpy()
+            current_seq = np.roll(current_seq, -1, 1)
+            current_seq[-1][-1] = word_i
+
+        gen_sentences = ' '.join(predicted)
+        # for key, token in self.dataset.pun_chars.items():
+        #     ending = ' ' if key in ['\n', '(', '"'] else ''
+        #     gen_sentences = gen_sentences.replace(' ' + token.lower(), key)
+        #
+        # gen_sentences = gen_sentences.replace('\n ', '\n')
+        # gen_sentences = gen_sentences.replace('( ', '(')
+
+        return gen_sentences
+
+
+dataset = Dataset()
+rnn = RNN(dataset=dataset)
+trained_rnn = rnn.train_rnn()
+save_filename = os.path.splitext(os.path.basename('./rnn_trained'))[0] + '.pt'
+torch.save(trained_rnn, save_filename)
+print('Model Trained and Saved')
+
+
+
+generated_script = rnn.generate('dog')
+print(generated_script)
