@@ -1,17 +1,13 @@
 import os
-
-import torch.nn.functional as F
 import string
 
 import numpy as np
-import torch
-
-from torch import nn, device, cuda
-from torch.utils.data import DataLoader, TensorDataset
-
+from torch import nn, device, cuda, from_numpy, optim, LongTensor, save, load
+import torch.nn.functional as torch_func
+from torch.utils.data import DataLoader, TensorDataset, Dataset as TorchDataset
 
 
-class Dataset(torch.utils.data.Dataset):
+class Dataset(TorchDataset):
     def __init__(self):
         self.pun_chars = {
             '.': '||period||',
@@ -27,7 +23,7 @@ class Dataset(torch.utils.data.Dataset):
         }
 
         with open('text.txt', 'rb') as fh:
-            text = self.__get_cleaned_text(fh.read())
+            text = self.__get_cleaned_text(fh.read().decode())
 
         self.chars = tuple(set(text))
         self.int_to_vocab = dict(enumerate(self.chars))
@@ -38,9 +34,9 @@ class Dataset(torch.utils.data.Dataset):
         self.batch_size = 256
 
     def __get_cleaned_text(self, data):
-        white_chars = string.ascii_letters + ''.join(self.pun_chars.values()) + ' '
+        white_chars = string.ascii_letters + ''.join(self.pun_chars.keys()) + ' '
         data = ''.join([
-            char for char in data.decode().lower().strip()
+            char for char in data.lower().strip()
             if char in white_chars
         ])
 
@@ -60,40 +56,45 @@ class Dataset(torch.utils.data.Dataset):
             feature.append(batch_words[i: i + self.seq_length])
             target.append(batch_words[i + self.seq_length])
 
-        target_tensors = torch.from_numpy(np.array(target))
-        feature_tensors = torch.from_numpy(np.array(feature))
+        target_tensors = from_numpy(np.array(target))
+        feature_tensors = from_numpy(np.array(feature))
 
         data = TensorDataset(feature_tensors, target_tensors)
-        data_loader = torch.utils.data.DataLoader(data, batch_size=self.batch_size, shuffle=True)
+        data_loader = DataLoader(data, batch_size=self.batch_size, shuffle=True)
 
         return data_loader
 
 
 class RNN(nn.Module):
-    def __init__(self, dataset, embedding_dim=256, hidden_dim=512, n_layers=3, dropout=0.3):
+    def __init__(self, dataset, embedding_dim=256, hidden_dim=512, n_layers=3, dropout=0.3, lr=0.0003, n_epochs=10):
         super().__init__()
         self.device = device("cuda" if cuda.is_available() else "cpu")
         self.to(self.device)
-
+        # dataset
         self.dataset = dataset
-        self.n_layers = n_layers
-        self.hidden_dim = hidden_dim
+        self.train_loader = dataset.get_dataloader()
         self.output_size = len(dataset.vocab_to_int)
         self.vocab_size = len(dataset.vocab_to_int)
+        # rnn
+        self.n_layers = n_layers
+        self.hidden_dim = hidden_dim
         self.dropout = nn.Dropout(dropout)
         self.embedding_dim = embedding_dim
-        self.n_epochs = 25
-
-        self.train_loader = dataset.get_dataloader()
-
-        # Model Layers
-        self.embedding = nn.Embedding(self.vocab_size, embedding_dim)
-        self.lstm = nn.LSTM(embedding_dim, hidden_dim, n_layers, dropout=dropout, batch_first=True)
-        self.fc = nn.Linear(hidden_dim, self.output_size)
-
-        self.epoch = 25
-        self.lr = 0.0003
-        self.show_every_n_batches = 500
+        self.n_epochs = n_epochs
+        self.lr = lr
+        self.embedding = nn.Embedding(self.vocab_size, embedding_dim).to(self.device)
+        self.lstm = nn.LSTM(
+            embedding_dim,
+            hidden_dim,
+            n_layers,
+            dropout=dropout,
+            batch_first=True
+        ).to(self.device)
+        self.fc = nn.Linear(hidden_dim, self.output_size).to(self.device)
+        self.criterion = nn.CrossEntropyLoss().to(self.device)
+        self.optimizer = optim.Adam(self.parameters(), lr=lr)
+        # logging
+        self.show_every_n_batches = 100
 
     def forward(self, nn_input, hidden):
         batch_size = nn_input.size(0)
@@ -120,91 +121,111 @@ class RNN(nn.Module):
             weight.new(self.n_layers, batch_size, self.hidden_dim).zero_().to(self.device)
         )
 
-
     def forward_back_prop(self, inp, target, hidden):
-        inp, target = inp.cuda().to(self.device), target.cuda().to(self.device)
-
+        inp = inp.cuda().to(self.device)
+        target =  target.cuda().to(self.device)
         hidden = tuple([i.data for i in hidden])
 
         self.zero_grad()
         out, hidden = self(inp, hidden)
 
-        loss = self.criterion(out, target)
+        loss = self.criterion(out, target.type(LongTensor).to(self.device))
         loss.backward()
 
         clip = 5
-
         nn.utils.clip_grad_norm_(self.parameters(), clip)
 
         self.optimizer.step()
 
         return loss.item(), hidden
 
-
-    def train_rnn(self):
+    def train_rnn(self, save_model=False):
         batch_losses = []
         self.train()
-        print("Training for %d epoch(s)..." % self.n_epochs)
+        print(f"Training for {self.n_epochs} epoch(s)")
         for epoch_i in range(1, self.n_epochs + 1):
             hidden = self.init_hidden(self.dataset.batch_size)
 
             for batch_i, (inputs, labels) in enumerate(self.train_loader, 1):
                 n_batches = len(self.train_loader.dataset) // self.dataset.batch_size
-                if (batch_i > n_batches):
+                if batch_i > n_batches:
                     break
-                loss, hidden = self.forward_back_prop( inputs, labels, hidden)
+                loss, hidden = self.forward_back_prop(inputs, labels, hidden)
 
                 batch_losses.append(loss)
                 if batch_i % self.show_every_n_batches == 0:
-                    print('Epoch: {:>4}/{:<4}  Loss: {}\n'.format(
-                        epoch_i, self.n_epochs, np.average(batch_losses)))
+                    print('Epoch: {:>4}/{:<4}  Loss: {}'.format(
+                        epoch_i, self.n_epochs, np.average(batch_losses)
+                    ))
                     batch_losses = []
+
+            if save_model:
+                dir = 'rnn_models'
+                try:
+                    os.mkdir(dir)
+                except FileExistsError:
+                    pass
+
+                save(self, f"{dir}/model_{epoch_i}.pt")
+                print('Model trained and saved')
 
         return self
 
     def generate(self, prime_word, predict_len=100):
         self.eval()
         prime_id = self.dataset.vocab_to_int[prime_word]
-        current_seq = np.full((1, self.seq_length), '<PAD>')
+        current_seq = np.full(
+            (1, self.dataset.seq_length),
+            self.dataset.vocab_to_int['<PAD>']
+        )
+
         current_seq[-1][-1] = prime_id
-        predicted = [self.dataset.int_to_vocab[prime_id]]
+        predicted_raw = [prime_word]
 
         for _ in range(predict_len):
-            current_seq = torch.LongTensor(current_seq).to(self.device)
+            current_seq = LongTensor(current_seq).to(self.device)
             hidden = self.init_hidden(current_seq.size(0))
             output, _ = self(current_seq, hidden)
-            p = F.softmax(output, dim=1).data
+            p = torch_func.softmax(output, dim=1).data
             p = p.to(self.device)
             top_k = 5
             p, top_i = p.topk(top_k)
+            p = p.cpu()
+            top_i = top_i.cpu()
             top_i = top_i.numpy().squeeze()
             p = p.numpy().squeeze()
-            word_i = np.random.choice(top_i, p=p / p.sum())
+            word_i = np.random.choice(top_i, p=(p / p.sum()))
             word = self.dataset.int_to_vocab[word_i]
-            predicted.append(word)
+            predicted_raw.append(word)
             current_seq = current_seq.cpu().numpy()
             current_seq = np.roll(current_seq, -1, 1)
             current_seq[-1][-1] = word_i
 
+        predicted = []
+        tmp = None
+        for token in predicted_raw:
+            if token in self.dataset.pun_chars.values() and tmp == token:
+                continue
+
+            tmp = token
+            predicted.append(token)
+
         gen_sentences = ' '.join(predicted)
-        # for key, token in self.dataset.pun_chars.items():
-        #     ending = ' ' if key in ['\n', '(', '"'] else ''
-        #     gen_sentences = gen_sentences.replace(' ' + token.lower(), key)
-        #
-        # gen_sentences = gen_sentences.replace('\n ', '\n')
-        # gen_sentences = gen_sentences.replace('( ', '(')
+
+        for key, token in self.dataset.pun_chars.items():
+            gen_sentences = gen_sentences.replace(f' {token.lower()}', key)
+
+        gen_sentences = gen_sentences.replace('\n ', '\n')
 
         return gen_sentences
 
 
-dataset = Dataset()
-rnn = RNN(dataset=dataset)
-trained_rnn = rnn.train_rnn()
-save_filename = os.path.splitext(os.path.basename('./rnn_trained'))[0] + '.pt'
-torch.save(trained_rnn, save_filename)
-print('Model Trained and Saved')
+if __name__ == '__main__':
+    dataset = Dataset()
+    rnn = RNN(dataset=dataset)
+    # rnn = load(rnn.path.format(1))
+    rnn.train_rnn(save_model=True)
 
-
-
-generated_script = rnn.generate('dog')
-print(generated_script)
+    generated_text = rnn.generate('well')
+    with open('generated_text.txt', 'w+') as fh:
+        fh.write(generated_text)
