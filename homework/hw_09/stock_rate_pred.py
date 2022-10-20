@@ -10,13 +10,15 @@ from torch import nn, from_numpy, Tensor, zeros, optim, save
 
 
 class Dataset:
-    def __init__(self, test_size=0.2, describe_data=False):
+    def __init__(self, test_size=0.1, describe_data=True):
         self.data = self.get_data("AAPL.csv")
+
+        if describe_data:
+            self.brief_data()
+
         self.test_size = test_size
         self.scaler = MinMaxScaler(feature_range=(-1, 1))
         self.data.Close = self.scaler.fit_transform(self.data.Close.values.reshape(-1, 1))
-        if describe_data:
-            self.brief_data()
 
     def get_data(self, name):
         return pd.read_csv(
@@ -64,11 +66,13 @@ class Dataset:
         plt.xlabel("Date")
         plt.title("AAPL Stock")
         plt.savefig('aapl_brief_data.png')
-        plt.show()
+        plt.show(block=False)
+        plt.pause(5)
+        plt.close()
 
 
 class LSTM(nn.Module):
-    def __init__(self, input_dim=1, hidden_dim=32, num_layers=2, output_dim=1, epochs=100, lr=0.01, look_back=1000):
+    def __init__(self, input_dim=1, hidden_dim=32, num_layers=2, output_dim=1, epochs=20, lr=0.01, look_back=100):
         super().__init__()
         self.dataset = Dataset()
         self.x_train, self.y_train, self.x_test, self.y_test = self.dataset.load_data(look_back=look_back)
@@ -108,7 +112,7 @@ class LSTM(nn.Module):
             if epoch % 10 == 0 and epoch != 0:
                 print("Epoch ", epoch, "MSE: ", loss.item())
 
-            hist[epoch] = loss.item()
+            hist[epoch-1] = loss.item()
 
             self.optimiser.zero_grad()
             loss.backward()
@@ -116,7 +120,10 @@ class LSTM(nn.Module):
 
         plt.plot(hist, label="Training loss")
         plt.legend()
-        plt.show()
+        plt.savefig('training_loss.png')
+        plt.show(block=False)
+        plt.pause(5)
+        plt.close()
 
     def predict(self):
         y_test_pred = self(self.x_test)
@@ -154,7 +161,9 @@ class LSTM(nn.Module):
         plt.ylabel('AAPL stock price')
         plt.legend()
         plt.savefig('aapl_pred.png')
-        plt.show()
+        plt.show(block=False)
+        plt.pause(5)
+        plt.close()
 
 
 model = LSTM()
