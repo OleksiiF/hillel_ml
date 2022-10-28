@@ -78,7 +78,18 @@
 * How much nodes in hidden layer
   * One output node, and the required input-output relationship is simple,  hidden layer dimension equal to two-thirds of the input dimension.
   * Multiple output nodes or the required input-output relationship is complex, the dimension of the hidden layer is equal to the sum of the input dimension plus the output dimension (which must be less than doubled the input dimension).
-  * The input-output connection is extremely complex, the dimension of the hidden layer is one less than doubled the input dimension. 
+  * The input-output connection is extremely complex, the dimension of the hidden layer is one less than doubled the input dimension.
+* CNN
+  * Filter/kernel sizes:
+    * 3 x 3
+    * 5 x 5
+  * Filters:
+    * Exponential
+    * Sobel
+    * Shara
+  * Parameters
+    * Padding 
+    * Striped 
 
 ##### Tasks
 * Classification
